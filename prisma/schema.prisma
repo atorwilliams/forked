@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Auth.js required models ──────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  // Auth.js core fields
+  name          String?   // display name (from OAuth or set on signup)
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?   // avatar URL
+  // Fork-specific fields
+  username      String?   @unique // set on signup or after first OAuth login
+  bio           String?
+  country       String?
+  city          String?
+  favouriteFood String?
+  passwordHash  String?   // null for pure OAuth accounts
+  accountType   String    @default("free")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts         Account[]
+  sessions         Session[]
+  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+  memberships      WorkspaceMember[]
+  createdRecipes   Recipe[]
+  versions         Version[]
+  comments         Comment[]
+  snapsMade        SnapPointer[]     @relation("SnapCreator")
+  snapsReceived    SnapPointer[]     @relation("OriginalAuthor")
+  addedIngredients     Ingredient[]
+  passwordResetTokens  PasswordResetToken[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Workspaces, Recipes, Versions ───────────────────────────────────────────
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  type        String   @default("public")
+  ownerId     String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+
+  owner   User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members WorkspaceMember[]
+  recipes Recipe[]
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String
+  joinedAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([workspaceId, userId])
+}
+
+model Recipe {
+  id                         String   @id @default(cuid())
+  slug                       String
+  workspaceId                String
+  createdBy                  String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  currentProductionVersionId String?
+  forkCount                  Int      @default(0)
+  snapCount                  Int      @default(0)
+  title                      String   @default("")
+  description                String?
+  tags                       String   @default("[]")
+  isProduction               Boolean  @default(false)
+  forkedFromRecipeId         String?
+
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id])
+  creator          User          @relation(fields: [createdBy], references: [id])
+  versions         Version[]
+  snapOrigins      SnapPointer[] @relation("OriginalRecipe")
+  snapChildren     SnapPointer[] @relation("NewRecipe")
+  forkedFromRecipe Recipe?       @relation("RecipeForks", fields: [forkedFromRecipeId], references: [id])
+  forks            Recipe[]      @relation("RecipeForks")
+
+  @@unique([workspaceId, slug])
+}
+
+model Version {
+  id                    String   @id @default(cuid())
+  recipeId              String
+  parentVersionId       String?
+  forkedFromVersionId   String?
+  forkedFromWorkspaceId String?
+  createdBy             String
+  createdAt             DateTime @default(now())
+  isProduction          Boolean  @default(false)
+  commitMessage         String?
+
+  contentMode String @default("freetext")
+  contentRaw  String
+
+  title       String?
+  description String?
+  yield       String?
+  prepTime    String?
+  cookTime    String?
+  tags        String?
+  procedure   String?
+  materials   String?
+  notes       String?
+
+  recipe        Recipe             @relation(fields: [recipeId], references: [id])
+  author        User               @relation(fields: [createdBy], references: [id])
+  parentVersion Version?           @relation("VersionHistory", fields: [parentVersionId], references: [id])
+  childVersions Version[]          @relation("VersionHistory")
+  media         Media[]
+  comments      Comment[]
+  ingredients   VersionIngredient[]
+}
+
+// ─── Ingredient system ────────────────────────────────────────────────────────
+
+model IngredientCategory {
+  id       String  @id @default(cuid())
+  name     String
+  slug     String  @unique
+  parentId String?
+
+  parent      IngredientCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    IngredientCategory[] @relation("CategoryTree")
+  ingredients Ingredient[]
+}
+
+model Ingredient {
+  id             String   @id @default(cuid())
+  nameNormalized String   @unique
+  displayName    String
+  categoryId     String
+  aliases        String   @default("[]")
+  addedBy        String?
+  createdAt      DateTime @default(now())
+
+  category    IngredientCategory @relation(fields: [categoryId], references: [id])
+  addedByUser User?              @relation(fields: [addedBy], references: [id])
+  usages      VersionIngredient[]
+}
+
+model VersionIngredient {
+  id           String  @id @default(cuid())
+  versionId    String
+  ingredientId String?
+  rawText      String
+  order        Int     @default(0)
+
+  quantity        Float?
+  unit            String?
+  unitTier        String  @default("measured")
+
+  packageCount    Float?
+  packageSize     Float?
+  packageSizeUnit String?
+  packageType     String?
+
+  isToTaste    Boolean @default(false)
+  isUnresolved Boolean @default(false)
+
+  version    Version     @relation(fields: [versionId], references: [id])
+  ingredient Ingredient? @relation(fields: [ingredientId], references: [id])
+}
+
+// ─── Media, Comments, Snaps ───────────────────────────────────────────────────
+
+model Media {
+  id         String   @id @default(cuid())
+  versionId  String
+  type       String
+  url        String
+  caption    String?
+  stepIndex  Int?
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  version Version @relation(fields: [versionId], references: [id])
+}
+
+model Comment {
+  id              String   @id @default(cuid())
+  versionId       String
+  authorId        String
+  content         String
+  createdAt       DateTime @default(now())
+  parentCommentId String?
+
+  version       Version   @relation(fields: [versionId], references: [id])
+  author        User      @relation(fields: [authorId], references: [id])
+  parentComment Comment?  @relation("CommentThread", fields: [parentCommentId], references: [id])
+  replies       Comment[] @relation("CommentThread")
+}
+
+model SnapPointer {
+  id                String   @id @default(cuid())
+  newRecipeId       String
+  originalRecipeId  String
+  originalVersionId String
+  snapCreatorId     String
+  originalAuthorId  String
+  snappedAt         DateTime @default(now())
+  displayNote       String?
+
+  newRecipe      Recipe @relation("NewRecipe", fields: [newRecipeId], references: [id])
+  originalRecipe Recipe @relation("OriginalRecipe", fields: [originalRecipeId], references: [id])
+  snapCreator    User   @relation("SnapCreator", fields: [snapCreatorId], references: [id])
+  originalAuthor User   @relation("OriginalAuthor", fields: [originalAuthorId], references: [id])
+}
