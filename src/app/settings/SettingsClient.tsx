@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { COUNTRY_MAP } from "@/lib/countries";
 
 interface Props {
@@ -197,6 +198,9 @@ export function SettingsClient({ initialName, initialBio, initialCountry, initia
 
       {/* Password change */}
       <PasswordSection />
+
+      {/* Danger zone */}
+      <DeleteAccountSection />
     </div>
   );
 }
@@ -281,6 +285,73 @@ function PasswordSection() {
           {error && <span style={{ color: "#f85149", fontSize: 13 }}>{error}</span>}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DeleteAccountSection() {
+  const [confirming, setConfirming] = useState(false);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleDelete = async () => {
+    if (input !== "DELETE") return;
+    setLoading(true);
+    setError("");
+    const res = await fetch("/api/user/account", { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Something went wrong.");
+      setLoading(false);
+      return;
+    }
+    await signOut({ callbackUrl: "/" });
+  };
+
+  return (
+    <div style={{ marginTop: 40, paddingTop: 32, borderTop: "1px solid var(--border)" }}>
+      <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: "#f85149" }}>Danger zone</h2>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+        Permanently delete your account and all your recipes. This cannot be undone.
+      </p>
+
+      {!confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          style={{ background: "transparent", border: "1px solid #f85149", borderRadius: 6, padding: "7px 18px", color: "#f85149", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+        >
+          Delete account
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+            Type <strong style={{ color: "var(--text)" }}>DELETE</strong> to confirm.
+          </p>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="DELETE"
+            style={{ ...inputStyle, borderColor: input === "DELETE" ? "#f85149" : "var(--border)" }}
+          />
+          {error && <span style={{ fontSize: 12, color: "#f85149" }}>{error}</span>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleDelete}
+              disabled={input !== "DELETE" || loading}
+              style={{ background: "#f85149", border: "none", borderRadius: 6, padding: "7px 18px", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: input !== "DELETE" || loading ? 0.5 : 1 }}
+            >
+              {loading ? "Deleting..." : "Yes, delete everything"}
+            </button>
+            <button
+              onClick={() => { setConfirming(false); setInput(""); setError(""); }}
+              style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "7px 18px", color: "var(--text-muted)", fontSize: 13, cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -133,6 +133,8 @@ model Recipe {
   tags                       String   @default("[]")
   isProduction               Boolean  @default(false)
   forkedFromRecipeId         String?
+  forkedFromUserId           String?   // preserved even after parent recipe/account deleted
+  forkedFromUserName         String?   // display name preserved even after account deleted
 
   workspace        Workspace     @relation(fields: [workspaceId], references: [id])
   creator          User          @relation(fields: [createdBy], references: [id])

@@ -24,7 +24,10 @@ export async function POST(req: NextRequest) {
   });
   if (!sv) return NextResponse.json({ error: "Source version not found." }, { status: 404 });
 
-  const sr = await db.recipe.findUnique({ where: { id: sourceRecipeId }, select: { tags: true, description: true } });
+  const sr = await db.recipe.findUnique({
+    where: { id: sourceRecipeId },
+    select: { tags: true, description: true, createdBy: true, creator: { select: { username: true, name: true } } },
+  });
   if (!sr) return NextResponse.json({ error: "Source recipe not found." }, { status: 404 });
 
   let workspace = await db.workspace.findUnique({ where: { slug: user.username } });
@@ -41,7 +44,10 @@ export async function POST(req: NextRequest) {
     data: {
       slug, workspaceId: workspace.id, createdBy: user.id,
       title: title.trim(), description: sr.description, tags: sr.tags,
-      isProduction: false, forkedFromRecipeId: sourceRecipeId,
+      isProduction: false,
+      forkedFromRecipeId: sourceRecipeId,
+      forkedFromUserId: sr.createdBy,
+      forkedFromUserName: sr.creator.username ?? sr.creator.name ?? null,
       versions: {
         create: {
           createdBy: user.id, isProduction: false,

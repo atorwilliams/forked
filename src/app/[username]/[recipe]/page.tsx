@@ -52,6 +52,11 @@ type RecipeData = {
   forkCount: number;
   snapCount: number;
   versionCount: number;
+  // Fork attribution — persists even after parent recipe/account deletion
+  forkedFromRecipeId: string | null;
+  forkedFromRecipeSlug: string | null;
+  forkedFromRecipeOwner: string | null;
+  forkedFromUserName: string | null;
   history: { id: string; commitMessage: string; author: string; createdAt: string; isProduction: boolean; isCurrent: boolean; isFork: boolean }[];
   forks: { username: string; recipeSlug: string; commitMessage: string; updatedAt: string; isProduction: boolean }[];
   snaps: { username: string; recipeSlug: string; commitMessage: string; snappedAt: string; displayNote: string | null }[];
@@ -71,6 +76,9 @@ export default async function RecipePage({
   const dbRecipe = await db.recipe.findFirst({
     where: { slug: recipe, workspace: { slug: username } },
     include: {
+      forkedFromRecipe: {
+        select: { slug: true, workspace: { select: { slug: true } } },
+      },
       versions: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -123,6 +131,10 @@ export default async function RecipePage({
     forkCount: dbRecipe.forkCount,
     snapCount: dbRecipe.snapCount,
     versionCount: dbRecipe.versions.length,
+    forkedFromRecipeId: dbRecipe.forkedFromRecipeId,
+    forkedFromRecipeSlug: dbRecipe.forkedFromRecipe?.slug ?? null,
+    forkedFromRecipeOwner: dbRecipe.forkedFromRecipe?.workspace.slug ?? null,
+    forkedFromUserName: dbRecipe.forkedFromUserName,
     history: dbRecipe.versions.map((ver, i) => ({
       id: ver.id,
       commitMessage: ver.commitMessage ?? "No message",
@@ -156,7 +168,7 @@ function RecipeView({ username, recipe, v, activeTab, recipeId, currentUsername 
     <div style={{ maxWidth: 1060, margin: "0 auto", padding: "28px 24px" }}>
 
       {/* ── Row 1: title + action buttons ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: v.forkedFromRecipeId || v.forkedFromUserName ? 4 : 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <nav style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 16 }}>
             <Link href={`/${username}`} style={{ color: "var(--text-link)", fontWeight: 500 }}>{username}</Link>
@@ -169,6 +181,23 @@ function RecipeView({ username, recipe, v, activeTab, recipeId, currentUsername 
           <GhActionBtn href={`/${username}/${recipe}/snap`} label="Snap" count={v.snapCount} color="var(--snap-purple)" />
         </div>
       </div>
+
+      {/* ── Fork attribution ── */}
+      {(v.forkedFromRecipeId || v.forkedFromUserName) && (
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, marginTop: 0 }}>
+          Forked from{" "}
+          {v.forkedFromRecipeId && v.forkedFromRecipeOwner && v.forkedFromRecipeSlug ? (
+            <Link href={`/${v.forkedFromRecipeOwner}/${v.forkedFromRecipeSlug}`} style={{ color: "var(--fork-blue)" }}>
+              {v.forkedFromRecipeSlug}
+            </Link>
+          ) : (
+            <span>an idea</span>
+          )}
+          {v.forkedFromUserName && (
+            <> by <Link href={`/${v.forkedFromUserName}`} style={{ color: "var(--text-link)" }}>{v.forkedFromUserName}</Link></>
+          )}
+        </p>
+      )}
 
       {/* ── Row 2: meta bar ── */}
       <div
