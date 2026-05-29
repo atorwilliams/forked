@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
+import { requireVerified } from "@/lib/require-verified";
 import { NewRecipeClient } from "./NewRecipeClient";
 
 export const metadata: Metadata = { title: "New recipe" };
 
 export default async function NewRecipePage() {
+  await requireVerified();
   const [ingredients, categories] = await Promise.all([
     db.ingredient.findMany({
       include: { category: { select: { id: true, name: true, slug: true } } },

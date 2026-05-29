@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { auth } from "@/auth";
+import { requireVerified } from "@/lib/require-verified";
 import { EditRecipeClient } from "./EditRecipeClient";
 
 export default async function EditRecipePage({ params }: { params: Promise<{ username: string; recipe: string }> }) {
   const { username, recipe: recipeSlug } = await params;
 
+  await requireVerified();
   const session = await auth();
   if (session?.user?.username !== username) notFound();
 

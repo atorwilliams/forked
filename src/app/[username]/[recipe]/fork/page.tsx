@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { requireVerified } from "@/lib/require-verified";
 import { ForkClient } from "./ForkClient";
 
 export default async function ForkPage({
@@ -8,6 +9,7 @@ export default async function ForkPage({
 }: {
   params: Promise<{ username: string; recipe: string }>;
 }) {
+  await requireVerified();
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 

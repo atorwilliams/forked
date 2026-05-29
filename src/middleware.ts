@@ -4,13 +4,9 @@ import { NextResponse } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
-// Requires login only (no email verification — OAuth users land here before verifying)
-const AUTH_ONLY = [
+// These routes require login
+const PROTECTED = [
   /^\/setup(\/|$)/,
-];
-
-// Requires login + verified email
-const AUTH_AND_VERIFIED = [
   /^\/new(\/|$)/,
   /^\/settings(\/|$)/,
   /^\/[^/]+\/[^/]+\/edit(\/|$)/,
@@ -21,17 +17,12 @@ const AUTH_AND_VERIFIED = [
 export default auth((req) => {
   const { nextUrl, auth: session } = req;
 
-  const needsAuth = [...AUTH_ONLY, ...AUTH_AND_VERIFIED].some((p) => p.test(nextUrl.pathname));
-  const needsVerified = AUTH_AND_VERIFIED.some((p) => p.test(nextUrl.pathname));
+  const isProtected = PROTECTED.some((p) => p.test(nextUrl.pathname));
 
-  if (needsAuth && !session) {
+  if (isProtected && !session) {
     const loginUrl = new URL("/login", nextUrl.origin);
     loginUrl.searchParams.set("callbackUrl", nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  if (needsVerified && session && !session.user.emailVerified) {
-    return NextResponse.redirect(new URL("/verify-email", nextUrl.origin));
   }
 
   return NextResponse.next();
