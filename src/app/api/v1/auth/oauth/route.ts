@@ -35,8 +35,7 @@ export async function POST(req: NextRequest) {
     ].filter(Boolean);
 
     if (!validAudiences.includes(tokenData.aud)) {
-      console.error("[oauth] aud mismatch — got:", tokenData.aud, "valid:", validAudiences);
-      return NextResponse.json({ error: `Invalid token audience. Got: ${tokenData.aud}` }, { status: 401 });
+      return NextResponse.json({ error: "Invalid token audience." }, { status: 401 });
     }
 
     providerAccountId = tokenData.sub;
