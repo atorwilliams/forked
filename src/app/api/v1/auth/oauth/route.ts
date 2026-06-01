@@ -8,12 +8,12 @@ export async function POST(req: NextRequest) {
   const rl = rateLimit({ key: `api-oauth:${ip}`, limit: 10, window: 900 });
   if (!rl.ok) return tooManyRequests(rl.resetAt);
 
-  let body: { provider?: string; idToken?: string; code?: string; redirectUri?: string };
+  let body: { provider?: string; idToken?: string; code?: string; redirectUri?: string; accessToken?: string };
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { provider, idToken, code, redirectUri } = body;
+  const { provider, idToken, code, redirectUri, accessToken } = body;
 
   if (!provider || !["google", "github"].includes(provider)) {
     return NextResponse.json({ error: "Invalid provider." }, { status: 400 });
@@ -31,36 +31,47 @@ export async function POST(req: NextRequest) {
     const validAudiences = [
       process.env.AUTH_GOOGLE_ID,
       process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_ANDROID_CLIENT_ID,
     ].filter(Boolean);
 
     if (!validAudiences.includes(tokenData.aud)) {
-      return NextResponse.json({ error: "Invalid token audience." }, { status: 401 });
+      console.error("[oauth] aud mismatch — got:", tokenData.aud, "valid:", validAudiences);
+      return NextResponse.json({ error: `Invalid token audience. Got: ${tokenData.aud}` }, { status: 401 });
     }
 
     providerAccountId = tokenData.sub;
   } else {
-    if (!code) return NextResponse.json({ error: "code required for GitHub." }, { status: 400 });
+    // Mobile sends accessToken directly (react-native-app-auth exchanges the code client-side).
+    // Web sends code + redirectUri for server-side exchange.
+    let githubAccessToken: string;
 
-    const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        client_id: process.env.AUTH_GITHUB_ID,
-        client_secret: process.env.AUTH_GITHUB_SECRET,
-        code,
-        redirect_uri: redirectUri,
-      }),
-    });
+    if (accessToken) {
+      githubAccessToken = accessToken;
+    } else {
+      if (!code) return NextResponse.json({ error: "code or accessToken required for GitHub." }, { status: 400 });
 
-    if (!tokenRes.ok) return NextResponse.json({ error: "GitHub token exchange failed." }, { status: 401 });
-    const tokenData = await tokenRes.json();
+      const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          client_id: process.env.AUTH_GITHUB_ID,
+          client_secret: process.env.AUTH_GITHUB_SECRET,
+          code,
+          redirect_uri: redirectUri,
+        }),
+      });
 
-    if (!tokenData.access_token) {
-      return NextResponse.json({ error: tokenData.error_description ?? "Invalid GitHub code." }, { status: 401 });
+      if (!tokenRes.ok) return NextResponse.json({ error: "GitHub token exchange failed." }, { status: 401 });
+      const tokenData = await tokenRes.json();
+
+      if (!tokenData.access_token) {
+        return NextResponse.json({ error: tokenData.error_description ?? "Invalid GitHub code." }, { status: 401 });
+      }
+      githubAccessToken = tokenData.access_token;
     }
 
     const userRes = await fetch("https://api.github.com/user", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}`, "User-Agent": "Forked-App" },
+      headers: { Authorization: `Bearer ${githubAccessToken}`, "User-Agent": "Forked-App" },
     });
     if (!userRes.ok) return NextResponse.json({ error: "Failed to fetch GitHub profile." }, { status: 401 });
     const userData = await userRes.json();
