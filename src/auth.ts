@@ -59,20 +59,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+      }
+      // Always refresh from DB so username/verification changes take effect without re-login
+      if (token.id) {
         const dbUser = await db.user.findUnique({
-          where: { id: user.id },
+          where: { id: token.id as string },
           select: { username: true, accountType: true, emailVerified: true },
         });
         token.username = dbUser?.username ?? null;
         token.accountType = dbUser?.accountType ?? "free";
-        token.emailVerified = dbUser?.emailVerified?.toISOString() ?? null;
-      }
-      // Re-check from DB until verified, so clicking the email link takes effect without re-login
-      if (token.id && !token.emailVerified) {
-        const dbUser = await db.user.findUnique({
-          where: { id: token.id as string },
-          select: { emailVerified: true },
-        });
         token.emailVerified = dbUser?.emailVerified?.toISOString() ?? null;
       }
       return token;
